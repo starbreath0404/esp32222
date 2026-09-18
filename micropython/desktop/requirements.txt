@@ -1,0 +1,4 @@
+pyserial==3.5
+pyttsx3==2.99
+esptool==5.4.0
+mpremote==1.29.0
