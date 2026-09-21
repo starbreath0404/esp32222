@@ -66,7 +66,7 @@ class GloveApp:
 
         connection = ttk.Frame(root, padding=12)
         connection.pack(fill="x")
-        ttk.Label(connection, text="右手 COM 埠").pack(side="left")
+        ttk.Label(connection, text="手套 COM 埠").pack(side="left")
         self.port = ttk.Combobox(connection, width=18, state="readonly")
         self.port.pack(side="left", padx=8)
         ttk.Button(connection, text="重新整理", command=self.refresh_ports).pack(side="left")
@@ -136,7 +136,7 @@ class GloveApp:
 
     def send(self, payload):
         if not self.serial:
-            messagebox.showwarning("尚未連線", "請先連接右手 COM 埠")
+            messagebox.showwarning("尚未連線", "請先連接手套的 COM 埠")
             return
         data = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
         self.serial.write(data)

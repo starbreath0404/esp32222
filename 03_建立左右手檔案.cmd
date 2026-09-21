@@ -8,6 +8,6 @@ if not exist ".venv\Scripts\python.exe" exit /b 1
 if errorlevel 1 (
     echo 建立失敗。
 ) else (
-    echo 已建立 micropython\dist\left 和 micropython\dist\right。
+    echo Built micropython\dist\single, left and right.
 )
 pause

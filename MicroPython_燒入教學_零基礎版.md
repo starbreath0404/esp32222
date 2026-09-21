@@ -245,11 +245,14 @@ MAX98357A DIN：GPIO 18
 成功會產生：
 
 ```text
+D:\專題\micropython\dist\single
 D:\專題\micropython\dist\left
 D:\專題\micropython\dist\right
 ```
 
 每次修改 `common`、`left_glove` 或 `right_glove` 後，都要重新執行這一步。
+
+目前先做單手時，直接雙擊 `07_上傳單手程式.cmd`，它會自動重建並上傳 `dist\single`。單手不需要 ESP-NOW MAC。
 
 ## 14. 用 mpremote 上傳左手
 

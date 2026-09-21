@@ -10,6 +10,10 @@ RT-Thread MicroPython 版本的完整架構請見 `RT-Thread_MicroPython_獨立�
 
 完整搬移說明請見 `在其他電腦執行_零基礎版.md`。不要把舊電腦的 `.venv` 搬到新電腦。
 
+## 目前先做單手
+
+第一階段請使用 `micropython/single_glove`，雙手原始碼仍完整保留。燒錄 MicroPython 後，雙擊 `07_上傳單手程式.cmd` 上傳；完整步驟請見 `單手版本_操作教學.md`。
+
 目前先完成不依賴硬體的手勢辨識核心。每個取樣點包含左右手各 14 個特徵：
 
 - 5 個彎曲感測值

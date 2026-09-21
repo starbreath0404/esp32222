@@ -1,4 +1,4 @@
-"""Build upload-ready left/ and right/ directories on the PC."""
+"""Build upload-ready single-, left- and right-glove directories."""
 
 from pathlib import Path
 import shutil
@@ -21,9 +21,13 @@ def main():
         destination = DIST / ("left" if role == "left_glove" else "right")
         copy_tree_files(ROOT / "common", destination)
         copy_tree_files(ROOT / role, destination)
+    single = DIST / "single"
+    copy_tree_files(ROOT / "common", single)
+    for filename in ("audio.py", "serial_control.py"):
+        shutil.copy2(ROOT / "right_glove" / filename, single / filename)
+    copy_tree_files(ROOT / "single_glove", single)
     print("Built:", DIST)
 
 
 if __name__ == "__main__":
     main()
-
