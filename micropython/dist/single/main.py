@@ -24,6 +24,7 @@ def main():
     next_sample = time.ticks_ms()
     last_spoken_id = None
     cooldown_until = 0
+    sample_number = 0
 
     while True:
         command = control.poll()
@@ -79,15 +80,29 @@ def main():
         next_sample = time.ticks_add(next_sample, interval)
 
         try:
-            frame = sensors.read()
+            snapshot = sensors.read_snapshot()
+            frame = snapshot["frame"]
         except Exception as error:
             control.emit("error", code="SENSOR_READ_FAILED", detail=str(error))
             time.sleep_ms(100)
             continue
 
+        sample_number += 1
         if recorder.state == recorder.RECORDING:
-            recorder.add(frame)
+            if recorder.add(frame):
+                control.emit("record_frame", values=frame)
             continue
+
+        if sample_number % 5 == 0:
+            control.emit(
+                "sensor",
+                calibrated=snapshot["calibrated"],
+                flex_raw=snapshot["flex_raw"],
+                flex=snapshot["flex"],
+                accel=snapshot["accel"],
+                gyro=snapshot["gyro"],
+                mag=snapshot["mag"],
+            )
         if time.ticks_diff(now, cooldown_until) < 0:
             continue
 

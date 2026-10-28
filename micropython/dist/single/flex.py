@@ -30,11 +30,18 @@ class FlexReader:
 
     def read(self):
         raw = self.read_raw()
+        return self.convert(raw)
+
+    def convert(self, raw):
         if not self.calibration:
             return raw
         straight = self.calibration["straight"]
         bent = self.calibration["bent"]
         return [self._normalize(raw[i], straight[i], bent[i]) for i in range(5)]
+
+    @property
+    def is_calibrated(self):
+        return bool(self.calibration)
 
     @staticmethod
     def _normalize(raw, straight, bent):

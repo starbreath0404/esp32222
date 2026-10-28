@@ -32,8 +32,22 @@ class SensorReader:
         self.imu = MPU9250(i2c, calibration.get("imu"))
 
     def read(self):
-        values = self.flex.read() + self.imu.read()
+        return self.read_snapshot()["frame"]
+
+    def read_snapshot(self):
+        flex_raw = self.flex.read_raw()
+        flex_values = self.flex.convert(flex_raw)
+        imu_values = self.imu.read()
+        values = flex_values + imu_values
         if len(values) != 14:
             raise RuntimeError("sensor frame is not 14-dimensional")
-        return values
+        return {
+            "frame": values,
+            "flex_raw": flex_raw,
+            "flex": flex_values,
+            "calibrated": self.flex.is_calibrated,
+            "accel": imu_values[0:3],
+            "gyro": imu_values[3:6],
+            "mag": imu_values[6:9],
+        }
 

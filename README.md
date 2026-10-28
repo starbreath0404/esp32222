@@ -14,6 +14,8 @@ RT-Thread MicroPython 版本的完整架構請見 `RT-Thread_MicroPython_獨立�
 
 第一階段請使用 `micropython/single_glove`，雙手原始碼仍完整保留。燒錄 MicroPython 後，雙擊 `07_上傳單手程式.cmd` 上傳；完整步驟請見 `單手版本_操作教學.md`。
 
+新版錄製工具會顯示五根手指與九軸感測器的真實讀值，並將每次成功儲存的完整錄製備份到 `%LOCALAPPDATA%\GloveRecorder\recordings.sqlite3`，可在工具內查看及匯出 CSV。
+
 單手硬體腳位、Flex 分壓、功放與電源接法請見 `硬體接線圖_單手版.md`。第一次接線不要一次接完，依文件順序逐項測試。
 
 完整雙手接線與 ESP-NOW 架構請見 `硬體接線圖_雙手版.md`。建議先完成右手單手測試，再依雙手圖新增左手。

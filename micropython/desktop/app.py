@@ -13,6 +13,8 @@ import wave
 import serial
 from serial.tools import list_ports
 
+from recording_db import RecordingDatabase
+
 
 BAUD_RATE = 115200
 
@@ -57,12 +59,16 @@ class GloveApp:
     def __init__(self, root):
         self.root = root
         self.root.title("手勢翻譯手套錄製工具")
-        self.root.geometry("760x560")
+        self.root.geometry("860x760")
         self.serial = None
         self.reader_thread = None
         self.running = False
         self.last_gesture_id = None
         self.audio_path = None
+        self.database = RecordingDatabase()
+        self.recording_frames = []
+        self.mode = "single"
+        self.flex_calibrated = False
 
         connection = ttk.Frame(root, padding=12)
         connection.pack(fill="x")
@@ -88,10 +94,47 @@ class GloveApp:
         self.audio_label.grid(row=2, column=2, columnspan=2, sticky="w", padx=8)
         form.columnconfigure(1, weight=1)
 
+        sensors = ttk.LabelFrame(root, text="即時感測器讀值（唯讀）", padding=10)
+        sensors.pack(fill="x", padx=12, pady=4)
+        finger_names = ("拇指", "食指", "中指", "無名指", "小指")
+        self.flex_values = []
+        self.flex_bars = []
+        for row, name in enumerate(finger_names):
+            ttk.Label(sensors, text=name, width=7).grid(row=row, column=0, sticky="w")
+            value = tk.StringVar(value="--")
+            self.flex_values.append(value)
+            ttk.Label(sensors, textvariable=value, width=12).grid(row=row, column=1)
+            bar = ttk.Progressbar(sensors, maximum=65535, mode="determinate")
+            bar.grid(row=row, column=2, sticky="ew", padx=(6, 12))
+            self.flex_bars.append(bar)
+        self.flex_unit = tk.StringVar(value="未校正：ADC 原始值")
+        ttk.Label(sensors, textvariable=self.flex_unit).grid(
+            row=0, column=3, rowspan=2, sticky="nw"
+        )
+        self.imu_values = {}
+        imu_names = (
+            ("Ax", "Ay", "Az"),
+            ("Gx", "Gy", "Gz"),
+            ("Mx", "My", "Mz"),
+        )
+        for group, names in enumerate(imu_names):
+            frame = ttk.Frame(sensors)
+            frame.grid(row=group + 2, column=3, sticky="w")
+            for column, name in enumerate(names):
+                value = tk.StringVar(value="--")
+                self.imu_values[name] = value
+                ttk.Label(frame, text=name + ":").grid(row=0, column=column * 2)
+                ttk.Label(frame, textvariable=value, width=9).grid(
+                    row=0, column=column * 2 + 1
+                )
+        sensors.columnconfigure(2, weight=1)
+
         actions = ttk.Frame(root, padding=(12, 6))
         actions.pack(fill="x")
         ttk.Button(actions, text="查詢狀態", command=lambda: self.send({"command": "status"})).pack(side="left")
         ttk.Button(actions, text="列出手勢", command=lambda: self.send({"command": "list"})).pack(side="left", padx=8)
+        ttk.Button(actions, text="查看電腦紀錄", command=self.show_recordings).pack(side="left")
+        ttk.Button(actions, text="匯出全部 CSV", command=self.export_all_csv).pack(side="left", padx=8)
 
         ttk.Label(root, text="訊息紀錄").pack(anchor="w", padx=12)
         self.log = tk.Text(root, height=20, state="disabled")
@@ -154,15 +197,144 @@ class GloveApp:
                 break
 
     def handle_line(self, text):
-        self.write_log("ESP32 > " + text)
         try:
             event = json.loads(text)
         except ValueError:
+            self.write_log("ESP32 > " + text)
             return
-        if event.get("event") == "saved":
+        event_name = event.get("event")
+        if event_name == "sensor":
+            self.update_sensor_display(event)
+            return
+        if event_name == "record_frame":
+            values = event.get("values", [])
+            if len(values) == 14:
+                self.recording_frames.append(values)
+                self.update_frame_display(values)
+            return
+
+        self.write_log("ESP32 > " + text)
+        if event_name == "ready":
+            self.mode = event.get("mode", self.mode)
+        elif event_name == "status":
+            self.mode = event.get("mode", self.mode)
+        elif event_name == "recording":
+            self.recording_frames = []
+        elif event_name == "saved":
             self.last_gesture_id = event["gesture_id"]
+            label = self.label.get().strip()
+            if self.recording_frames:
+                try:
+                    row_id = self.database.add(
+                        label,
+                        self.last_gesture_id,
+                        event.get("mode", self.mode),
+                        self.recording_frames,
+                        50,
+                    )
+                    self.write_log(
+                        "已備份到電腦資料庫：紀錄 #%d（%d 筆）"
+                        % (row_id, len(self.recording_frames))
+                    )
+                except Exception as error:
+                    self.write_log("電腦資料庫備份失敗: " + str(error))
             if self.audio_path:
                 threading.Thread(target=self.upload_audio, daemon=True).start()
+
+    def update_sensor_display(self, event):
+        self.flex_calibrated = bool(event.get("calibrated"))
+        values = event.get("flex", [])
+        if len(values) == 5:
+            maximum = 100 if self.flex_calibrated else 65535
+            self.flex_unit.set(
+                "已校正：彎曲百分比（%）"
+                if self.flex_calibrated
+                else "未校正：ADC 原始值"
+            )
+            for index, value in enumerate(values):
+                self.flex_bars[index].configure(maximum=maximum)
+                self.flex_bars[index]["value"] = value
+                self.flex_values[index].set(
+                    "%.1f %%" % value if self.flex_calibrated else str(int(value))
+                )
+        for prefix, key in (("A", "accel"), ("G", "gyro"), ("M", "mag")):
+            vector = event.get(key, [])
+            if len(vector) == 3:
+                for axis, value in zip(("x", "y", "z"), vector):
+                    self.imu_values[prefix + axis].set("%.3f" % value)
+
+    def update_frame_display(self, values):
+        event = {
+            "calibrated": self.flex_calibrated,
+            "flex": values[:5],
+            "accel": values[5:8],
+            "gyro": values[8:11],
+            "mag": values[11:14],
+        }
+        self.update_sensor_display(event)
+
+    def show_recordings(self):
+        window = tk.Toplevel(self.root)
+        window.title("電腦錄製紀錄")
+        window.geometry("850x430")
+        columns = ("id", "time", "label", "gesture", "mode", "frames")
+        tree = ttk.Treeview(window, columns=columns, show="headings", selectmode="extended")
+        titles = {
+            "id": "編號",
+            "time": "時間",
+            "label": "意思",
+            "gesture": "手勢 ID",
+            "mode": "模式",
+            "frames": "樣本數",
+        }
+        widths = {"id": 60, "time": 210, "label": 170, "gesture": 80, "mode": 80, "frames": 80}
+        for column in columns:
+            tree.heading(column, text=titles[column])
+            tree.column(column, width=widths[column], anchor="center")
+        for row in self.database.list_recordings():
+            tree.insert(
+                "",
+                "end",
+                iid=str(row["id"]),
+                values=(
+                    row["id"],
+                    row["created_at"],
+                    row["label"],
+                    row["gesture_id"],
+                    row["mode"],
+                    row["frame_count"],
+                ),
+            )
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+        ttk.Button(
+            window,
+            text="匯出選取項目 CSV",
+            command=lambda: self.export_selected_csv(tree),
+        ).pack(pady=(0, 10))
+
+    def export_selected_csv(self, tree):
+        selected = [int(value) for value in tree.selection()]
+        if not selected:
+            messagebox.showwarning("未選取", "請先選擇至少一筆電腦紀錄")
+            return
+        self.export_csv(selected)
+
+    def export_all_csv(self):
+        self.export_csv(None)
+
+    def export_csv(self, recording_ids):
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV 檔案", "*.csv")],
+            initialfile="gesture_recordings.csv",
+        )
+        if not path:
+            return
+        try:
+            count = self.database.export_csv(path, recording_ids)
+            messagebox.showinfo("匯出完成", "已匯出 %d 筆感測樣本" % count)
+        except Exception as error:
+            messagebox.showerror("匯出失敗", str(error))
 
     def save_label(self):
         label = self.label.get().strip()
